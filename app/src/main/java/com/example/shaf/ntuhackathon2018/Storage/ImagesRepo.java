@@ -40,30 +40,29 @@ public class ImagesRepo {
 
 
     public static String saveImage(Bitmap image) {
-        final String imageFile = UUID.randomUUID().toString() + ".png";
-        mImageMap.put(imageFile, image);
+
+        final String imageFile = UUID.randomUUID().toString() + ".jpg";
+//        mImageMap.put(imageFile, image);
 
         File filename = new File(mStorage, imageFile);
         try (FileOutputStream out = new FileOutputStream(filename)) {
-            image.compress(Bitmap.CompressFormat.PNG, 100, out); // bmp is your Bitmap instance
+            image.compress(Bitmap.CompressFormat.JPEG, 75, out); // bmp is your Bitmap instance
             // PNG is a lossless format, the compression factor (100) is ignored
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         return imageFile;
     }
 
-    public List<Image> getImages() {
+    public List<String> getImages() {
         File[] files = mStorage.listFiles();
         if (files == null) {
             Log.e(TAG, "Could not list files.");
             return null;
         }
-        ArrayList<Image> list = new ArrayList<>(files.length);
+        ArrayList<String> list = new ArrayList<>(files.length);
         for (File f : files) {
-            Bitmap bitmap = BitmapFactory.decodeFile(f.getAbsolutePath());
-            list.add(new Image(f.getAbsolutePath(), bitmap));
+            list.add(f.getAbsolutePath());
         }
         return list;
     }

@@ -2,38 +2,43 @@ package com.example.shaf.ntuhackathon2018;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
 import com.example.shaf.ntuhackathon2018.Storage.ImagesRepo;
-import com.example.shaf.ntuhackathon2018.Storage.ImagesRepository;
-import com.example.shaf.ntuhackathon2018.Storage.InMemoryImagesRepository;
+import com.example.shaf.ntuhackathon2018.Utils.ImageUtils;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -41,22 +46,54 @@ public class MainActivity extends AppCompatActivity {
     private static final int RC_HANDLE_CAMERA_PERM = 2;
     private static final int REQUEST_WRITE_PERMISSION = 20;
     static final int REQUEST_IMAGE_CAPTURE = 1;
+    private static final int REQUEST_UPDATE_DATA = 800;
 
     ImagesRepo imagesRepo;
+    ImageView imageView;
+    EditText textView;
+    List<String> imageslist;
+    TextExtractor textExtractor;
+    private String pathString;
+    private static Uri mCurrentPhotoPath;
+    private RecyclerView recyclerView;
+    private RecyclerAdapter adapter;
 
     private final String TAG = MainActivity.class.getSimpleName();
 
-    private static Uri currentPhotoPath;
-    private String pathString;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-//        getSupportActionBar().setElevation(0);
-
         imagesRepo = new ImagesRepo(this);
+        textExtractor = new TextExtractor(this);
+
+        recyclerView = findViewById(R.id.recyclerView);
+        recyclerView.setHasFixedSize(true);
+        imageslist = imagesRepo.getImages();
+
+
+        adapter = new RecyclerAdapter(this);
+        adapter.setImageslist(imageslist);
+        recyclerView.setAdapter(adapter);
+        recyclerView.addOnItemTouchListener(new RecyclerItemCustomListener(this,
+                recyclerView, new RecyclerItemCustomListener.OnItemClickListener() {
+            @Override
+            public void onItemClick(View view, int position) {
+                imageslist = imagesRepo.getImages();
+                adapter.setImageslist(imageslist);
+                loadImage(position);
+
+            }
+
+            @Override
+            public void onLongItemClick(View view, int position) {
+
+//                showDeleteDialogBox(position);
+            }
+        }));
+
+
 
         int rc = ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA);
         if (rc == PackageManager.PERMISSION_GRANTED) {
@@ -76,15 +113,49 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        TextView textView = findViewById(R.id.text_view);
-        List<Image> imageslist = imagesRepo.getImages();
-        textView.setText("LIST" + imageslist.size());
 
-        ImageView imageView = findViewById(R.id.image_view);
-        imageView.setImageBitmap(imageslist.get(0).getImage());
+//
+//        Log.e(TAG, imageslist.size() + "");
+//        if (!imageslist.isEmpty()) {
+//            textView.setText("LIST" + imageslist.get(imageslist.size() - 1));
+//
+//            String imagepath = imageslist.get(imageslist.size() - 1);
+//            File file = new File(imagepath);
+//            pathString = imagepath;
+//            Glide.with(this).load(file).into(imageView);
+//            updateDisplay();
+//        }
+    }
+
+    private void loadImage(int position) {
+
+        Intent intent = new Intent(MainActivity.this, OCRActivity.class);
+        intent.putExtra("position", position);
+        intent.putExtra("filepath", imageslist.get(position));
+        startActivityForResult(intent, REQUEST_UPDATE_DATA);
+
     }
 
 
+//    private void updateDisplay() {
+//        imageslist = imagesRepo.getImages();
+//        Log.e(TAG, imageslist.size() + "");
+//        String extractedText = "no data";
+//        if (!imageslist.isEmpty()) {
+//            String imagepath = imageslist.get(imageslist.size() - 1);
+//            File file = new File(imagepath);
+//            try {
+////            imageUri = Uri.fromFil  textExtractor = new TextExtractor(this);e(new File(image.getSource()));
+//                extractedText = textExtractor.extractText(file);
+//                Log.e(TAG, "SS: " + extractedText);
+//            } catch (FileNotFoundException e) {
+//                e.printStackTrace();
+//            }
+//            textView.setText(extractedText);
+//            Glide.with(this).load(file).into(imageView);
+//        }
+//
+//    }
 
     /**
      * Handles the requesting of the camera permission.  This includes
@@ -131,81 +202,97 @@ public class MainActivity extends AppCompatActivity {
         // Ensure that there's a camera activity to handle the intent
         if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
             // Create the File where the photo should go
-            File photoFile = null;
-            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
 
-//            try {
-//                photoFile = createImageFile();
-//            } catch (IOException e) {
-//                e.printStackTrace();
+            File photoFile = null;
+
+            try {
+                photoFile = createImageFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            // Continue only if the File was successfully created
+            if (photoFile != null) {
+                Uri photoURI = FileProvider.getUriForFile(this,
+                        getString(R.string.provider_authority),
+                        photoFile);
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
 //            }
-//
-//            // Continue only if the File was successfully created
-//            if (photoFile != null) {
-//                Uri photoURI = FileProvider.getUriForFile(this,
-//                        "com.example.android.fileprovider",
-//                        photoFile);
-//                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
-//            }
+            }
         }
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    protected void onActivityResult ( int requestCode, int resultCode, Intent data){
         if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
             // Image capture intent result
-            if (data.getExtras() != null) {
-                Log.e(TAG, data.getExtras().toString());
-                onImageCapture(data.getExtras());
 
-            } else
-                Toast.makeText(this, "Image Capture: No Data", Toast.LENGTH_SHORT).show();
+                try {
+                    onImageCapture();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
 
         } else if (requestCode == REQUEST_IMAGE_IMPORT && resultCode == Activity.RESULT_OK && data != null) {
-            // Image import intent result
-            // onImageImport(data.getExtras());
 
-            // The ACTION_GET_CONTENT Intent returns a URI pointing to the file.
-            // It does not return the file itself. Extract the URI
-            // from the Intent and process it.
+
             Uri uri = data.getData();
-        //  importUriImage(uri);
+            mCurrentPhotoPath = uri;
+            Glide.with(this).load(mCurrentPhotoPath).into(imageView);
+            try {
+                onImageImport();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
     }
 
-    private File createImageFile() throws IOException {
+    private File createImageFile () throws IOException {
 
-        String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        String imageFileName = "JPEG_" + timeStamp + "_";
+        final String imageFileName = UUID.randomUUID().toString();
 
 //        // Get the directory for the user's public pictures directory.
         File storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
         File photoFile = File.createTempFile(imageFileName, null, storageDir);
 
         // Save a file: path for use with ACTION_VIEW intents
-        currentPhotoPath = FileProvider.getUriForFile(this,getString(R.string.provider_authority),
+        mCurrentPhotoPath = FileProvider.getUriForFile(this, getString(R.string.provider_authority),
                 photoFile);
 
         pathString = photoFile.getPath();
 
-        Toast.makeText(this, currentPhotoPath.toString() + "\n" + pathString, Toast.LENGTH_LONG).show();
         return photoFile;
     }
 
-    private void onImageCapture(Bundle extras) {
-        Bitmap imageBitmap = (Bitmap) extras.get("data");
-    //    Log.e(TAG, imageBitmap.toString());
+    private void onImageCapture() throws IOException {
         Log.e(TAG, "Photo successfully taken.");
-        String key = imagesRepo.saveImage(imageBitmap);
-          Toast.makeText(this, key, Toast.LENGTH_SHORT).show();
-        /*update UI!!*/
+
+        ContentResolver cr = this.getContentResolver();
+        Bitmap bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mCurrentPhotoPath);
+
+        String key = ImagesRepo.saveImage(bitmap);
+        Toast.makeText(this, key, Toast.LENGTH_SHORT).show();
+//        updateDisplay();
+        adapter.setImageslist(imagesRepo.getImages());
+    }
+
+    private void onImageImport() throws IOException {
+        ContentResolver cr = this.getContentResolver();
+        Bitmap bitmap = android.provider.MediaStore.Images.Media.getBitmap(cr, mCurrentPhotoPath);
+
+        String key = ImagesRepo.saveImage(bitmap);
+        Toast.makeText(this, key, Toast.LENGTH_SHORT).show();
+//        updateDisplay();
+        adapter.setImageslist(imagesRepo.getImages());
     }
 
 
-    public void dispatchImportImageIntent() {
+    public void dispatchImportImageIntent () {
         // Use an ACTION_GET_CONTENT intent to select a file using the system's file browser.
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         // Filter files only to those that can be "opened" and directly accessed as a stream.
@@ -218,14 +305,14 @@ public class MainActivity extends AppCompatActivity {
 
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onCreateOptionsMenu (Menu menu){
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected (MenuItem item){
         // Handle action bar item clicks here. The action bar will
         // automatically handle clicks on the Home/Up button, so long
         // as you specify a parent activity in AndroidManifest.xml.
@@ -239,6 +326,29 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-
+//
+//
+//    private void setPic() {
+//        // Get the dimensions of the View
+//        int targetW = imageView.getWidth();
+//        int targetH = imageView.getHeight();
+//
+//        // Get the dimensions of the bitmap
+//        BitmapFactory.Options bmOptions = new BitmapFactory.Options();
+//        bmOptions.inJustDecodeBounds = true;
+//        BitmapFactory.decodeFile(pathString, bmOptions);
+//        int photoW = bmOptions.outWidth;
+//        int photoH = bmOptions.outHeight;
+//
+//        // Determine how much to scale down the image
+//        int scaleFactor = Math.min(photoW/targetW, photoH/targetH);
+//
+//        // Decode the image file into a Bitmap sized to fill the View
+//        bmOptions.inJustDecodeBounds = false;
+//        bmOptions.inSampleSize = scaleFactor;
+//
+//        Bitmap bitmap = BitmapFactory.decodeFile(pathString, bmOptions);
+//        imageView.setImageBitmap(bitmap);
+//    }
 
 }

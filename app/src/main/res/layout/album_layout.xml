@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_margin="8dp"
+    android:orientation="vertical">
+
+    <ImageView
+        android:layout_marginTop="8dp"
+        android:layout_width="150dp"
+        android:layout_height="120dp"
+        android:elevation="12dp"
+        android:src="@drawable/common_google_signin_btn_icon_dark"
+        android:scaleType="centerCrop"
+        android:id="@+id/album"
+    />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="01"
+        android:padding="8dp"
+        android:gravity="center"
+        android:textSize="14dp"
+        android:id="@+id/album_title"
+        />
+
+</LinearLayout>
